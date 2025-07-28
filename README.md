@@ -1,5 +1,3 @@
-Project Overview
-This project guides you through building a complete auction platform, covering both the front-end and back-end development. 
 
 Technologies Used
  * MongoDB: NoSQL database for storing application data.
