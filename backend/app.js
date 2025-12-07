@@ -1,5 +1,5 @@
 import express from "express";
-import { config } from "dotenv";
+import{config} from "dotenv";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import fileUpload from "express-fileupload";
@@ -31,13 +31,15 @@ app.use(fileUpload({
   useTempFiles: true,
   tempFileDir: "/tmp/"
 }));
-app.use(errorMiddleware);
 
 app.use('/api/v1/users', userRouter);
 app.use('/api/v1/auctionitem', auctionItemRouter);
 app.use('/api/v1/bid', bidRouter);
 app.use('/api/v1/commission',commissionRouter)
 app.use('/api/v1/superadmin',superAdminRouter)
+
+// Error middleware should be after all routes
+app.use(errorMiddleware);
 
 endedAuctionCron();
 verifyCommissionCron();

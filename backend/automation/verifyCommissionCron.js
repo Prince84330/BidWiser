@@ -48,7 +48,14 @@ export const verifyCommissionCron = () => {
 
           const subject = `Your Payment Has Been Successfully Verified And Settled`;
           const message = `Dear ${user.userName},\n\nWe are pleased to inform you that your recent payment has been successfully verified and settled. Thank you for promptly providing the necessary proof of payment. Your account has been updated, and you can now proceed with your activities on our platform without any restrictions.\n\nPayment Details:\nAmount Settled: ${proof.amount}\nUnpaid Amount: ${updatedUserData.unpaidCommission}\nDate of Settlement: ${settlementDate}\n\nBest regards,\nBidWiser Auction Team`;
-          sendEmail({ email: user.email, subject, message });
+          try {
+            const emailResult = await sendEmail({ email: user.email, subject, message });
+            if (!emailResult?.success) {
+              console.warn(`⚠️  Email not sent to user ${user.email}:`, emailResult?.error || "Email configuration missing");
+            }
+          } catch (error) {
+            console.error(`❌ Error sending email to user ${user.email}:`, error.message);
+          }
         }
         console.log(`User ${proof.userId} paid commission of ${proof.amount}`);
       } catch (error) {

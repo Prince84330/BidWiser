@@ -2,7 +2,7 @@ import React from "react";
 import { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
-import { register } from "@/store/slices/userSlice";
+import { register, verifyOtp, resendOtp } from "@/store/slices/userSlice";
 import { toast } from "react-toastify";
 
 const SignUp = () => {
@@ -19,8 +19,12 @@ const SignUp = () => {
   const [paypalEmail, setPaypalEmail] = useState("");
   const [profileImage, setProfileImage] = useState("");
   const [profileImagePreview, setProfileImagePreview] = useState("");
+  const [showOtpInput, setShowOtpInput] = useState(false);
+  const [otp, setOtp] = useState("");
+  const [verifyingOtp, setVerifyingOtp] = useState(false);
+  const [registeredEmail, setRegisteredEmail] = useState("");
 
-  const { loading, isAuthenticated } = useSelector((state) => state.user);
+  const { loading, isAuthenticated, isVerified } = useSelector((state) => state.user);
   const navigateTo = useNavigate();
   const dispatch = useDispatch();
 
@@ -47,15 +51,78 @@ const SignUp = () => {
       formData.append("bankName", bankName),
       formData.append("razorpayAccountNumber", razorpayAccountNumber),
       formData.append("paypalEmail", paypalEmail));
-    dispatch(register(formData));
     
+    try {
+      const registerResponse = await dispatch(register(formData));
+      
+      // Show OTP input form after successful registration
+      if (registerResponse?.payload?.success) {
+        setRegisteredEmail(email.toLowerCase());
+        setShowOtpInput(true);
+        
+        // In development, show OTP if email failed
+        if (registerResponse?.payload?.devOtp) {
+          toast.info(`Development Mode: OTP is ${registerResponse.payload.devOtp}`, {
+            autoClose: 10000,
+          });
+          console.log("🔑 Development OTP:", registerResponse.payload.devOtp);
+        } else {
+          toast.info("Please check your email for OTP verification.");
+        }
+        
+        if (registerResponse?.payload?.emailError) {
+          toast.warning("Email sending failed. Check console for OTP.");
+          console.error("Email Error:", registerResponse.payload.emailError);
+        }
+      }
+    } catch (error) {
+      // Error is already handled in the slice
+    }
+  };
+
+  const handleVerifyOtp = async (e) => {
+    e.preventDefault();
+    if (!otp || otp.trim() === "") {
+      toast.error("Please enter the OTP.");
+      return;
+    }
+
+    setVerifyingOtp(true);
+    try {
+      const verifyResponse = await dispatch(verifyOtp({ 
+        email: registeredEmail || email.toLowerCase(), 
+        otp: otp.trim() 
+      }));
+      
+      if (verifyResponse?.payload?.success) {
+        // OTP verified successfully, user is now logged in
+        setShowOtpInput(false);
+        setOtp("");
+        toast.success("Account verified successfully! Redirecting...");
+        setTimeout(() => {
+          navigateTo("/");
+        }, 1500);
+      }
+    } catch (error) {
+      // Error is already handled in the slice
+    } finally {
+      setVerifyingOtp(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    try {
+      await dispatch(resendOtp(registeredEmail || email.toLowerCase()));
+    } catch (error) {
+      // Error is already handled in the slice
+    }
   };
 
   useEffect(() => {
     if (isAuthenticated) {
       navigateTo("/");
     }
-  }, [dispatch, loading, isAuthenticated]);
+  }, [dispatch, loading, isAuthenticated, navigateTo]);
 
   const imageHandler = (e) => {
     const file = e.target.files[0];
@@ -74,8 +141,10 @@ const SignUp = () => {
           <h1
             className={`text-[#d6482b] text-2xl font-bold mb-2 min-[480px]:text-4xl md:text-6xl xl:text-7xl 2xl:text-8xl`}
           >
-            Register
+            {showOtpInput ? "Verify Account" : "Register"}
           </h1>
+          
+          {!showOtpInput ? (
           <form
             className="flex flex-col gap-5 w-full"
             onSubmit={handleRegister}
@@ -235,12 +304,59 @@ const SignUp = () => {
               className="bg-[#d6482b] w-[420px] font-semibold hover:bg-[#b8381e] transition-all duration-300 text-xl py-2 px-4 rounded-md text-white mx-auto lg:w-[640px] my-4"
               type="submit"
               disabled={loading}
-              onClick={handleRegister}
             >
-              {loading && "Registering..."}
-              {!loading && "Register"}
+              {loading ? "Registering..." : "Register"}
             </button>
           </form>
+          ) : (
+            <form onSubmit={handleVerifyOtp} className="flex flex-col gap-5 w-full">
+              <div className="flex flex-col gap-2">
+                <label className="text-[16px] text-stone-500">Enter OTP</label>
+                <input
+                  type="text"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  className="text-[16px] py-2 bg-transparent border-b-[1px] border-b-stone-500 focus:outline-none text-center text-2xl tracking-widest"
+                  placeholder="000000"
+                  maxLength={6}
+                  required
+                />
+                <p className="text-sm text-stone-400 mt-1">
+                  OTP sent to: {registeredEmail || email}
+                </p>
+                {import.meta.env.DEV && (
+                  <p className="text-xs text-yellow-600 mt-1 bg-yellow-50 p-2 rounded">
+                    💡 Development Mode: Check browser console or backend logs for OTP if email not received
+                  </p>
+                )}
+              </div>
+              <button
+                className="bg-[#d6482b] font-semibold hover:bg-[#b8381e] transition-all duration-300 text-xl py-2 px-4 rounded-md text-white mx-auto my-4"
+                type="submit"
+                disabled={verifyingOtp}
+              >
+                {verifyingOtp ? "Verifying..." : "Verify OTP"}
+              </button>
+              <button
+                type="button"
+                onClick={handleResendOtp}
+                className="text-[#d6482b] hover:underline text-sm mx-auto"
+              >
+                Resend OTP
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowOtpInput(false);
+                  setOtp("");
+                  navigateTo("/login");
+                }}
+                className="text-stone-500 hover:text-stone-700 text-sm mx-auto"
+              >
+                Verify Later (Go to Login)
+              </button>
+            </form>
+          )}
         </div>
       </section>
     </>

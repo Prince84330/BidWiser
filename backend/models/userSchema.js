@@ -64,7 +64,7 @@ const userSchema = new mongoose.Schema({
   },
   isVerified: {
     type: Boolean,
-    default: true, // later we will change it to false For testing purpose
+    default: false, // User must verify account via OTP
   },
   createdAt: {
     type: Date,

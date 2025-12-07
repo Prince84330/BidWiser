@@ -5,14 +5,24 @@ import { catchAsyncErrors } from "../middlewares/catchAsyncErrors.js";
 
 export const isAuthenticated = catchAsyncErrors(async (req, res, next) => {
   const token = req.cookies.token;
-  // console.log(token);
   
   if (!token) {
-    return next(new ErrorHandler("User not authenticated.", 400));
+    return next(new ErrorHandler("User not authenticated.", 401));
   }
-  const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-  req.user = await User.findById(decoded.id);
-  next();
+  
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+    req.user = await User.findById(decoded.id);
+    
+    if (!req.user) {
+      return next(new ErrorHandler("User not found.", 401));
+    }
+    
+    next();
+  } catch (error) {
+    // JWT verification errors (invalid token, expired, etc.) will be caught here
+    return next(new ErrorHandler("Invalid or expired token.", 401));
+  }
 });
 
 export const isAuthorized = (...roles) => {

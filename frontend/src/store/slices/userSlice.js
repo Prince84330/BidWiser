@@ -123,13 +123,17 @@ export const register = (data) => async (dispatch) => {
         },
       }
     );
-    dispatch(userSlice.actions.registerSuccess(response.data));
+    // Don't set isAuthenticated to true - user needs to verify OTP first
+    dispatch(userSlice.actions.registerFailed()); // Keep as not authenticated
     toast.success(response.data.message);
     dispatch(userSlice.actions.clearAllErrors());
+    return { payload: response.data };
   } catch (error) {
     dispatch(userSlice.actions.registerFailed());
-    toast.error(error.response.data.message);
+    const errorMessage = error.response?.data?.message || error.message || "Registration failed. Please try again.";
+    toast.error(errorMessage);
     dispatch(userSlice.actions.clearAllErrors());
+    throw error;
   }
 };
 
@@ -147,36 +151,30 @@ export const login = (data) => async (dispatch) => {
       }
     );
 
-    if (!response.data.user.isVerified) {
-      // If user is not verified, prompt for OTP
-      const otp = window.prompt("Your account is not verified. Please enter the OTP sent to your email:");
-      if (otp) {
-        await dispatch(verifyOtp({ email: data.email, otp }));
-        // After OTP verification, try logging in again
-        const loginResponse = await axios.post(
-          "http://localhost:5000/api/v1/users/login",
-          data,
-          {
-            withCredentials: true,
-            headers: {
-              "Content-Type": "application/json",
-            },
-          }
-        );
-        dispatch(userSlice.actions.loginSuccess(loginResponse.data));
-        toast.success(loginResponse.data.message);
-      } else {
-        toast.error("OTP is required to verify your account.");
-      }
-    } else {
-      dispatch(userSlice.actions.loginSuccess(response.data));
-      toast.success(response.data.message);
+    // Check if account requires verification
+    if (response.data.requiresVerification || !response.data.user?.isVerified) {
+      // Return response indicating verification is needed
+      dispatch(userSlice.actions.loginFailed());
+      return {
+        payload: {
+          requiresVerification: true,
+          email: data.email,
+          message: response.data.message || "Please verify your account with OTP.",
+        },
+      };
     }
+
+    // User is verified, proceed with login
+    dispatch(userSlice.actions.loginSuccess(response.data));
+    toast.success(response.data.message);
     dispatch(userSlice.actions.clearAllErrors());
+    return { payload: response.data };
   } catch (error) {
     dispatch(userSlice.actions.loginFailed());
-    toast.error(error.response.data.message);
+    const errorMessage = error.response?.data?.message || error.message || "Login failed. Please check your credentials.";
+    toast.error(errorMessage);
     dispatch(userSlice.actions.clearAllErrors());
+    throw error;
   }
 };
 
@@ -194,12 +192,37 @@ export const verifyOtp = (data) => async (dispatch) => {
       }
     );
     dispatch(userSlice.actions.verifyOtpSuccess(response.data));
+    dispatch(userSlice.actions.loginSuccess(response.data)); // Update user state after verification
     toast.success(response.data.message);
     dispatch(userSlice.actions.clearAllErrors());
+    return { payload: response.data };
   } catch (error) {
-    dispatch(userSlice.actions.verifyOtpFailed(error.response.data.message));
-    toast.error(error.response.data.message);
+    const errorMessage = error.response?.data?.message || error.message || "OTP verification failed.";
+    dispatch(userSlice.actions.verifyOtpFailed(errorMessage));
+    toast.error(errorMessage);
     dispatch(userSlice.actions.clearAllErrors());
+    throw error;
+  }
+};
+
+export const resendOtp = (email) => async (dispatch) => {
+  try {
+    const response = await axios.post(
+      "http://localhost:5000/api/v1/users/resend-otp",
+      { email },
+      {
+        withCredentials: true,
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
+    );
+    toast.success(response.data.message);
+    return { payload: response.data };
+  } catch (error) {
+    const errorMessage = error.response?.data?.message || error.message || "Failed to resend OTP.";
+    toast.error(errorMessage);
+    throw error;
   }
 };
 
